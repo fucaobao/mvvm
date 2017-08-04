@@ -1,4 +1,8 @@
+// 监听事件
+// 每调用一次{{}}表达式，执行new Watcher()一次，期间，只执行this.depIds = []一次
+// 下一次调用的时候，重新new Watcher()，然后重置this.depIds为[]
 function Watcher(exp, vm, cb) {
+    this.depIds = [];
     this.exp = exp;
     this.cb = cb;
     this.vm = vm;
@@ -20,6 +24,13 @@ Watcher.prototype = {
         let value = this.getter(this.vm); //触发getter，将自身添加到dep中，这里会调用Observer.js里面的get方法
         Dep.target = null; //添加成功后，重置
         return value;
+    },
+    addDep: function(dep) {
+        var uid = dep.uid;
+        if (this.depIds.indexOf(uid) === -1) {
+            this.depIds.push(uid);
+            dep.addSub(this);
+        }
     },
     update: function() {
         let newVal = this.get();

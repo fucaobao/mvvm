@@ -2,7 +2,7 @@ function MVVM($options) {
     this._options = $options || {};
     this.data = this._options.data;
     this._proxy(this.data);
-    observer(this.data);
+    observe(this.data);
     new Compiler(this._options.el || document.body, this);
 }
 MVVM.prototype._proxy = function(data) {
