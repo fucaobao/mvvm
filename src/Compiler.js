@@ -6,20 +6,17 @@ function Compiler(el, vm) {
     this.el = CompileUtil.isNodeElement(el) ? el : document.querySelector(el);
     this.vm = vm;
     if (this.el) {
+        // 文档碎片，遍历过程中会有多次的dom操作，为提高性能先将el节点转化为fragment文档碎片进行解析操作
+        // 解析操作完成，将其添加回真实dom节点中
         this.fragment = this.nodeToFragment(this.el);
         this.compile(this.fragment);
-        // 将文档碎片放回真实dom
         this.el.appendChild(this.fragment);
     }
 }
-
 Compiler.prototype = {
-    // 文档碎片，遍历过程中会有多次的dom操作，为提高性能我们会将el节点转化为fragment文档碎片进行解析操作
-    // 解析操作完成，将其添加回真实dom节点中
     nodeToFragment: function(el) {
-        let fragment = document.createDocumentFragment();
-        let child;
-
+        let child,
+            fragment = document.createDocumentFragment();
         while (child = el.firstChild) {
             fragment.appendChild(child);
         }
@@ -29,19 +26,16 @@ Compiler.prototype = {
         let self = this,
             childNodes = el.childNodes;
         if (CompileUtil.isNodeElement(el)) {
-            this.compileNodeElement(el);
+            self.compileNodeElement(el);
         } else if (CompileUtil.isTextElement(el)) {
-            this.compileTextElement(el);
+            self.compileTextElement(el);
         }
         if (childNodes && childNodes.length) {
-            //使用slice进行浅复制，生成一个新的数组。否则处理中childNodes这个数组会变化，引起循环异常
-            //我碰到的情况是，数组的变化会使循环重新从头开始
-            //注意slice浅复制与clone的深复制的区分
+            //使用slice进行浅复制，生成一个新的数组，不会修改原数组childNodes。
             [].slice.call(childNodes).forEach(function(node) {
                 self.compile(node);
             });
         }
-
     },
     compileNodeElement: function(el) {
         let self = this,
@@ -50,13 +44,12 @@ Compiler.prototype = {
             let name = attr.name,
                 exp = attr.value;
             if (CompileUtil.isDirective(name)) {
-                let sndDir = name.substr(2);
-                if (CompileUtil.isEventDirective(sndDir)) {
-                    //v-on:click
-                    let eventDir = sndDir.substr(3);
-                    CompileUtil.handleEvent(el, self.vm, eventDir, exp);
+                let directive = name.substr(2);
+                if (CompileUtil.isEventDirective(directive)) {
+                    let eventType = directive.substr(3);
+                    CompileUtil.handleEvent(el, self.vm, eventType, exp);
                 } else {
-                    self[sndDir] && self[sndDir](el, exp);
+                    self[directive] && self[directive](el, exp);
                 }
             }
         });
@@ -70,11 +63,11 @@ Compiler.prototype = {
             normalText;
         let content = el.textContent;
         if (!content.match(reg)) return; //没有绑定数据，不处理
-        let fragment = document.createDocumentFragment();
-        let element;
+        let element,
+            fragment = document.createDocumentFragment();
+        // exec用法参见http://www.w3school.com.cn/jsref/jsref_exec_regexp.asp
         while (match = reg.exec(content)) {
-            if (match.index > lastIndex) {
-                //普通文本
+            if (match.index > lastIndex) { //普通文本
                 normalText = content.slice(lastIndex, match.index);
                 element = document.createTextNode(normalText);
                 fragment.appendChild(element);
@@ -82,12 +75,13 @@ Compiler.prototype = {
             lastIndex = reg.lastIndex;
             //占位符
             let exp = match[1];
-            element = document.createTextNode(' ');
+            element = document.createTextNode('');
             fragment.appendChild(element);
             //绑定占位符与表达式
+            // debugger
             this.bind(element, exp, 'text');
         }
-        if (lastIndex < content.length) {
+        if (lastIndex < content.length - 1) {
             //剩余的普通文本
             normalText = content.slice(lastIndex);
             element = document.createTextNode(normalText);
@@ -96,55 +90,86 @@ Compiler.prototype = {
         this.replaceElement(el, fragment);
     },
     replaceElement: function(el, fragment) {
-        let parent = el.parentNode;
-        if (parent) {
-            parent.replaceChild(fragment, el);
+        el.parentNode.replaceChild(fragment, el);
+    },
+    model: function(node, exp) {
+        let self = this,
+            val = this._getVmVal(self.vm, exp);
+        //v-model,exp只能是绑定到一个变量上，不能是表达式
+        if (node.tagName.toLowerCase() === 'input') {
+            node.addEventListener('input', function(e) {
+                let newVal = e.target.value;
+                if (val === newVal) {
+                    return;
+                }
+                self._setVmVal(self.vm, exp, newVal);
+            }, false);
+            self.bind(node, exp, 'value');
         }
     },
     bind: function(node, exp, update) {
         //绑定view与model
         //添加一个Watcher，监听exp相关的所有字段变化，具体方法可以看Watcher的注释
-        let updateFn = update + "Updater";
-        updateFn && new Watcher(exp, this.vm, function(newVal, oldVal) {
-            CompileUtil[updateFn] && CompileUtil[updateFn](node, newVal, oldVal);
+        let self = this,
+            updateFn = CompileUtil[update + 'Updater'];
+        updateFn && new Watcher(exp, self.vm, function(newVal, oldVal) {
+            updateFn(node, newVal, oldVal);
         });
     },
-    model: function(node, exp) {
-        let self = this;
-        //v-model,exp只能是绑定到一个变量上，不能是表达式
-        if (node.tagName.toLocaleLowerCase() === 'input') {
-            self.bind(node, exp, 'value');
-            node.addEventListener('input', function(e) {
-                self.vm[exp] = e.target.value;
-            });
-        }
+    /**
+     * [获取挂载在vm实例上的value]
+     * @param  {[type]} vm  [mvvm实例]
+     * @param  {[type]} exp [expression]
+     */
+    _getVmVal: function(vm, exp) {
+        let val = vm,
+            exps = exp.split('.');
+        exps.forEach(function(key) {
+            key = key.trim();
+            val = val[key];
+        });
+        return val;
+    },
+    /**
+     * [设置挂载在vm实例上的value值]
+     * @param  {[type]} vm    [mvvm实例]
+     * @param  {[type]} exp   [expression]
+     * @param  {[type]} value [新值]
+     */
+    _setVmVal: function(vm, exp, value) {
+        let val = vm,
+            exps = exp.split('.');
+        exps.forEach(function(key, index) {
+            key = key.trim();
+            if (index < exps.length - 1) {
+                val = val[key];
+            } else {
+                val[key] = value;
+            }
+        });
     }
 };
 const CompileUtil = {
+    isNodeElement: function(node) {
+        return node.nodeType === 1;
+    },
+    isTextElement: function(node) {
+        return node.nodeType === 3;
+    },
     isDirective: function(name) {
-        //是否是指令
         return name.indexOf('v-') === 0;
     },
     isEventDirective: function(name) {
-        //是否是事件指令
-        return name.indexOf('on') === 0;
-    },
-    isTextElement: function(node) {
-        //是否是纯文字节点
-        return node.nodeType === 3;
-    },
-    isNodeElement: function(node) {
-        //是否是普通节点
-        return node.nodeType === 1;
+        return name.indexOf('on:') === 0;
     },
     textUpdater: function(node, newVal, oldVal) {
-        node.textContent = newVal;
-    },
-    handleEvent: function(node, vm, event, exp) {
-        let fn = vm._options.methods && vm._options.methods[exp];
-        node.addEventListener(event, fn.bind(vm), false);
+        node.textContent = typeof newVal === 'undefined' ? '' : newVal;
     },
     valueUpdater: function(node, newVal, oldVal) {
-        node.value = newVal ? newVal : '';
+        node.value = typeof newVal === 'undefined' ? '' : newVal;
+    },
+    handleEvent: function(el, vm, evtType, exp) {
+        let fn = vm._options.methods && vm._options.methods[exp];
+        fn && el.addEventListener(evtType, fn.bind(vm), false);
     }
 };
