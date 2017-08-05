@@ -37,6 +37,7 @@ Observer.prototype.defineReactive = function(data, key, value) {
         enumerable: true,
         configurable: false,
         get: function() {
+            // 如果Dep.target这里不为null，说明是Watcher引起的，不是我们自己在查看赋值
             if (Dep.target) {
                 //JS的浏览器单线程特性，保证这个全局变量在同一时间内，只会有同一个监听器使用
                 dep.depend();
@@ -56,7 +57,7 @@ Observer.prototype.defineReactive = function(data, key, value) {
             //因为在set中继续调用set赋值，引起递归调用
             value = newVal;
             //监视新值
-            observe(newVal);
+            childOb = observe(newVal);
             dep.notify();
         }
     });

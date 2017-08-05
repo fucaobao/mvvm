@@ -12,13 +12,13 @@ MVVM.prototype._proxy = function(data) {
             enumerable: true,
             configurable: true,
             get: function() {
-                return data[key];
+                return self.data[key];
             },
             set: function(newVal) {
-                if (val === newVal) {
+                if (self.data[key] === newVal) {
                     return;
                 }
-                val = newVal;
+                self.data[key] = newVal;
             }
         });
     });
