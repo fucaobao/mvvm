@@ -1,5 +1,5 @@
-function MVVM($options) {
-    this._options = $options || {};
+function MVVM(options) {
+    this._options = options || {};
     this.data = this._options.data;
     this._proxy(this.data);
     observe(this.data);

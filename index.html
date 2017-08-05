@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>MVVM</title>
+    <script src="src/Dep.js"></script>
     <script src="src/Observer.js"></script>
     <script src="src/Watcher.js"></script>
     <script src="src/Compiler.js"></script>
@@ -12,9 +13,9 @@
 
 <body>
     <div id="app">
-        <p>{{b.c.d}}这是普通文本{{message.c}}这是普通文本</p>
+        <p><!-- {{b.c.d}} -->这是普通文本{{message.c}}这是普通文本</p>
         <p>{{message.c}}</p>
-        <p>{{flag}}</p>
+        <!-- <p>{{flag}}</p> -->
         <p>
             <input type="text" v-model="message.c" />
         </p>

@@ -29,6 +29,7 @@ Observer.prototype.walk = function(data) {
     });
 };
 Observer.prototype.defineReactive = function(data, key, value) {
+    // 同一个key对应同一个dep，同一个this.subs
     let dep = new Dep();
     let childOb = observe(value);
     // 这里是递归，将b.c.d observer完后，倒序d->c->b defineProperty
@@ -61,24 +62,4 @@ Observer.prototype.defineReactive = function(data, key, value) {
             dep.notify();
         }
     });
-};
-
-let uid = 0;
-Dep.target = null;
-
-function Dep() {
-    this.uid = uid++;
-    this.subs = [];
-}
-Dep.prototype.addSub = function(sub) {
-    this.subs.push(sub);
-};
-Dep.prototype.notify = function() {
-    this.subs.forEach(function(sub) {
-        // 执行sub的update更新函数
-        sub.update();
-    });
-};
-Dep.prototype.depend = function() {
-    Dep.target.addDep(this);
 };
