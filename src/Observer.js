@@ -50,7 +50,7 @@ Observer.prototype.defineReactive = function(data, key, value) {
             return value;
         },
         set: function(newVal) {
-            if (newVal == value) {
+            if (newVal === value) {
                 return;
             }
             //修改value,get取值时也会变化
